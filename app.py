@@ -6,7 +6,8 @@ from database import (
     listar_emprestimos,
     adicionar_emprestimo,
     marcar_devolvido,
-    desfazer_devolucao
+    desfazer_devolucao,
+    excluir_emprestimo
 )
 
 
@@ -23,7 +24,7 @@ def main(page: ft.Page):
         size=30,
         weight=ft.FontWeight.BOLD
     )
-
+    
     campo_nome = ft.TextField(
         label="Nome",
         width=250
@@ -49,6 +50,12 @@ def main(page: ft.Page):
         width=150
     )
 
+    campo_pesquisa = ft.TextField(
+	 label="Pesquisar por nome, CPF ou livro",
+	 prefix_icon=ft.Icons.SEARCH,
+	 width=400,
+    )
+
     tabela = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("Nome")),
@@ -62,6 +69,32 @@ def main(page: ft.Page):
         rows=[]
     )
 
+    def excluir(id):
+        excluir_emprestimo(id)
+        atualizar_tabela()
+
+        page.snack_bar = ft.SnackBar(
+	  content=ft.Text("Empréstimo excluído!")
+        )
+        page.snack_bar.open = True
+        page.update()
+	
+    def sucesso(msg):
+        page.snack_bar = ft.SnackBar(
+          content=ft.Text(msg),
+          bgcolor="green"
+        )
+        page.snack_bar.open = True
+        page.update()
+
+    def erro(msg):
+        page.snack_bar = ft.SnackBar(
+         content=ft.Text(msg),
+         bgcolor="red"
+        )
+        page.snack_bar.open = True
+        page.update()
+    
     def formatar_cpf(e):
         cpf = ''.join(filter(str.isdigit, campo_cpf.value))
 
@@ -116,55 +149,77 @@ def main(page: ft.Page):
             return False
 
     def atualizar_tabela():
-        tabela.rows.clear()
+     tabela.rows.clear()
 
-        emprestimos = listar_emprestimos()
+     pesquisa = campo_pesquisa.value.lower().strip()
 
-        for item in emprestimos:
-            status = "✅ Devolvido" if item["devolvido"] else "📚 Emprestado"
+     emprestimos = listar_emprestimos()
 
-            tabela.rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(item["nome"])),
-                        ft.DataCell(ft.Text(item["cpf"])),
-                        ft.DataCell(ft.Text(item["livro"])),
-                        ft.DataCell(ft.Text(item["data_emprestimo"])),
-                        ft.DataCell(ft.Text(item["data_devolucao"])),
-                        ft.DataCell(ft.Text(status)),
-                        ft.DataCell(
-                            ft.Row(
-                                controls=[
-                                    ft.IconButton(
-                                        icon=ft.Icons.CHECK,
-                                        tooltip="Marcar devolvido",
-                                        on_click=lambda e,
-                                        id=item["id"]:
-                                        devolver(id)
-                                    ),
-                                    ft.IconButton(
-                                        icon=ft.Icons.UNDO,
-                                        tooltip="Desfazer",
-                                        on_click=lambda e,
-                                        id=item["id"]:
-                                        desfazer(id)
-                                    )
-                                ]
-                            )
+     for item in emprestimos:
+
+        if pesquisa:
+            if (
+                pesquisa not in item["nome"].lower()
+                and pesquisa not in item["cpf"].lower()
+                and pesquisa not in item["livro"].lower()
+            ):
+                continue
+
+        status = "✅ Devolvido" if item["devolvido"] else "📚 Emprestado"
+
+        tabela.rows.append(
+            ft.DataRow(
+                cells=[
+                    ft.DataCell(ft.Text(item["nome"])),
+                    ft.DataCell(ft.Text(item["cpf"])),
+                    ft.DataCell(ft.Text(item["livro"])),
+                    ft.DataCell(ft.Text(item["data_emprestimo"])),
+                    ft.DataCell(ft.Text(item["data_devolucao"])),
+                    ft.DataCell(ft.Text(status)),
+                    ft.DataCell(
+                        ft.Row(
+                            controls=[
+                                ft.IconButton(
+                                    icon=ft.Icons.CHECK,
+                                    tooltip="Marcar devolvido",
+                                    on_click=lambda e, id=item["id"]: devolver(id),
+                                ),
+				ft.IconButton(
+    				    icon=ft.Icons.DELETE,
+    				    tooltip="Excluir",
+    				    icon_color="red",
+    				    on_click=lambda e, id=item["id"]: excluir(id),
+				),
+                                ft.IconButton(
+                                    icon=ft.Icons.UNDO,
+                                    tooltip="Desfazer",
+                                    on_click=lambda e, id=item["id"]: desfazer(id),
+                                ),
+                            ]
                         )
-                    ]
-                )
+                    ),
+                ]
             )
-
-        page.update()
-
+        )
+     page.update()
+    campo_pesquisa.on_change = lambda e: atualizar_tabela()
     def salvar(e):
-        if campo_nome.value.strip() == "":
-            return
+        if not campo_nome.value.strip():
+    	        erro("Informe o nome")
+    	        campo_nome.error_text = "Obrigatório"
+    	        page.update()
+    	        return
 
-        if campo_livro.value.strip() == "":
-            return
+        campo_nome.error_text = None
+        
+        if not campo_livro.value.strip():
+                erro("Informe o nome do livro")
+                campo_livro.error_text = "Obrigatório"
+                page.update()
+                return
 
+        campo_livro.error_text = None
+        
         if not data_valida(campo_data_emprestimo.value):
             campo_data_emprestimo.error_text = "Data inválida"
             page.update()
@@ -193,6 +248,12 @@ def main(page: ft.Page):
         campo_data_emprestimo.value = ""
         campo_data_devolucao.value = ""
 
+        page.snack_bar = ft.SnackBar(
+                content=ft.Text("Emprestimo cadastrado!")
+                )
+        page.snack_bar.open = True
+        page.update()
+
         atualizar_tabela()
 
     def devolver(id):
@@ -219,11 +280,15 @@ def main(page: ft.Page):
     )
 
     page.add(
-        titulo,
-        formulario,
-        ft.Divider(),
-        tabela
-    )
+    titulo,
+    formulario,
+    campo_pesquisa,
+    ft.Divider(),
+    ft.Row(
+        controls=[tabela],
+        scroll=ft.ScrollMode.AUTO,
+    ),
+)
 
     atualizar_tabela()
 
