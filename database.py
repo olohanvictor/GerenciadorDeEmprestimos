@@ -101,3 +101,15 @@ def desfazer_devolucao(id):
 
     conn.commit()
     conn.close()
+
+def excluir_emprestimo(id):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM emprestimos
+        WHERE id = ?
+    """, (id,))
+
+    conn.commit()
+    conn.close()
