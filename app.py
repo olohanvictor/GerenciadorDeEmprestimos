@@ -1,60 +1,29 @@
 import flet as ft
-from datetime import datetime
-
-from database import (
-    criar_tabela,
-    listar_emprestimos,
-    adicionar_emprestimo,
-    marcar_devolvido,
-    desfazer_devolucao,
-    excluir_emprestimo
-)
-
+import utils
+import database
 
 def main(page: ft.Page):
-    criar_tabela()
+    database.criar_tabela()
 
     page.title = "Biblioteca - Controle de Empréstimos"
     page.window.maximized = True
     page.scroll = ft.ScrollMode.AUTO
     page.padding = 20
 
-    titulo = ft.Text(
-        "Biblioteca - Controle de Empréstimos",
-        size=30,
-        weight=ft.FontWeight.BOLD
-    )
-    
-    campo_nome = ft.TextField(
-        label="Nome",
-        width=250
-    )
+    # Variável que controla qual ID está em edição (None se for um novo cadastro)
+    id_em_edicao = None
 
-    campo_cpf = ft.TextField(
-        label="CPF",
-        width=180
-    )
+    # --- COMPONENTES VISUAIS ---
+    titulo = ft.Text("Biblioteca - Controle de Empréstimos", size=30, weight=ft.FontWeight.BOLD)
+    campo_nome = ft.TextField(label="Nome", width=250)
+    campo_cpf = ft.TextField(label="CPF", width=180)
+    campo_livro = ft.TextField(label="Livro", width=300)
+    campo_data_emprestimo = ft.TextField(label="Data empréstimo", hint_text="DD/MM/AAAA", width=180)
+    campo_data_devolucao = ft.TextField(label="Data devolução", hint_text="DD/MM/AAAA", width=180)
+    campo_pesquisa = ft.TextField(label="Pesquisar por nome, CPF ou livro", prefix_icon=ft.Icons.SEARCH, width=400)
 
-    campo_livro = ft.TextField(
-        label="Livro",
-        width=300
-    )
-
-    campo_data_emprestimo = ft.TextField(
-        label="Data empréstimo",
-        width=150
-    )
-
-    campo_data_devolucao = ft.TextField(
-        label="Data devolução",
-        width=150
-    )
-
-    campo_pesquisa = ft.TextField(
-	 label="Pesquisar por nome, CPF ou livro",
-	 prefix_icon=ft.Icons.SEARCH,
-	 width=400,
-    )
+    botao_salvar = ft.ElevatedButton("Salvar", on_click=lambda e: salvar(e), icon=ft.Icons.SAVE)
+    botao_cancelar = ft.TextButton("Cancelar", on_click=lambda e: limpar_edicao(), visible=False, icon=ft.Icons.CANCEL)
 
     tabela = ft.DataTable(
         columns=[
@@ -69,228 +38,245 @@ def main(page: ft.Page):
         rows=[]
     )
 
-    def excluir(id):
-        excluir_emprestimo(id)
-        atualizar_tabela()
-
-        page.snack_bar = ft.SnackBar(
-	  content=ft.Text("Empréstimo excluído!")
-        )
-        page.snack_bar.open = True
-        page.update()
-	
+    # --- SINAIS DE POP-UP (SnackBars) ---
     def sucesso(msg):
-        page.snack_bar = ft.SnackBar(
-          content=ft.Text(msg),
-          bgcolor="green"
-        )
+        page.snack_bar = ft.SnackBar(content=ft.Text(msg), bgcolor="green")
         page.snack_bar.open = True
         page.update()
 
     def erro(msg):
-        page.snack_bar = ft.SnackBar(
-         content=ft.Text(msg),
-         bgcolor="red"
-        )
+        page.snack_bar = ft.SnackBar(content=ft.Text(msg), bgcolor="red", duration=4000)
         page.snack_bar.open = True
         page.update()
     
-    def formatar_cpf(e):
-        cpf = ''.join(filter(str.isdigit, campo_cpf.value))
+    # --- PROCESSOS DE DIGITAÇÃO E VALIDAÇÃO ---
+    def ao_mudar_cpf(e):
+        campo_cpf.value = utils.formatar_cpf_str(campo_cpf.value)
+        page.update()
 
-        if len(cpf) > 11:
-            cpf = cpf[:11]
+    def ao_mudar_data_emp(e):
+        campo_data_emprestimo.value = utils.formatar_data_str(campo_data_emprestimo.value)
+        page.update()
 
-        if len(cpf) > 9:
-            cpf = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}"
-        elif len(cpf) > 6:
-            cpf = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:]}"
-        elif len(cpf) > 3:
-            cpf = f"{cpf[:3]}.{cpf[3:]}"
+    def ao_mudar_data_dev(e):
+        campo_data_devolucao.value = utils.formatar_data_str(campo_data_devolucao.value)
+        page.update()
+
+    def validar_campo_data_ao_sair(campo):
+        if not campo.value.strip():
+            campo.error_text = None
+        elif len(campo.value) < 10:
+            campo.error_text = "Data incompleta!"
+        elif not utils.es_data_valida(campo.value):
+            campo.error_text = "Data inválida!"
         else:
-            cpf = cpf
-
-        campo_cpf.value = cpf
+            campo.error_text = None
         page.update()
 
-    campo_cpf.on_change = formatar_cpf
-
-    def formatar_data(campo):
-        data = ''.join(filter(str.isdigit, campo.value))
-
-        if len(data) > 8:
-            data = data[:8]
-
-        if len(data) > 4:
-            data = f"{data[:2]}/{data[2:4]}/{data[4:]}"
-        elif len(data) > 2:
-            data = f"{data[:2]}/{data[2:]}"
-        else:
-            data = data
-
-        campo.value = data
-
-    def data_emprestimo_change(e):
-        formatar_data(campo_data_emprestimo)
-        page.update()
-
-    def data_devolucao_change(e):
-        formatar_data(campo_data_devolucao)
-        page.update()
-
-    campo_data_emprestimo.on_change = data_emprestimo_change
-    campo_data_devolucao.on_change = data_devolucao_change
-
-    def data_valida(data):
-        try:
-            datetime.strptime(data, "%d/%m/%Y")
-            return True
-        except:
-            return False
-
-    def atualizar_tabela():
-     tabela.rows.clear()
-
-     pesquisa = campo_pesquisa.value.lower().strip()
-
-     emprestimos = listar_emprestimos()
-
-     for item in emprestimos:
-
-        if pesquisa:
-            if (
-                pesquisa not in item["nome"].lower()
-                and pesquisa not in item["cpf"].lower()
-                and pesquisa not in item["livro"].lower()
-            ):
-                continue
-
-        status = "✅ Devolvido" if item["devolvido"] else "📚 Emprestado"
-
-        tabela.rows.append(
-            ft.DataRow(
-                cells=[
-                    ft.DataCell(ft.Text(item["nome"])),
-                    ft.DataCell(ft.Text(item["cpf"])),
-                    ft.DataCell(ft.Text(item["livro"])),
-                    ft.DataCell(ft.Text(item["data_emprestimo"])),
-                    ft.DataCell(ft.Text(item["data_devolucao"])),
-                    ft.DataCell(ft.Text(status)),
-                    ft.DataCell(
-                        ft.Row(
-                            controls=[
-                                ft.IconButton(
-                                    icon=ft.Icons.CHECK,
-                                    tooltip="Marcar devolvido",
-                                    on_click=lambda e, id=item["id"]: devolver(id),
-                                ),
-				ft.IconButton(
-    				    icon=ft.Icons.DELETE,
-    				    tooltip="Excluir",
-    				    icon_color="red",
-    				    on_click=lambda e, id=item["id"]: excluir(id),
-				),
-                                ft.IconButton(
-                                    icon=ft.Icons.UNDO,
-                                    tooltip="Desfazer",
-                                    on_click=lambda e, id=item["id"]: desfazer(id),
-                                ),
-                            ]
-                        )
-                    ),
-                ]
-            )
-        )
-     page.update()
+    # Vinculando os eventos explicitamente
+    campo_cpf.on_change = ao_mudar_cpf
+    campo_data_emprestimo.on_change = ao_mudar_data_emp
+    campo_data_devolucao.on_change = ao_mudar_data_dev
+    campo_data_emprestimo.on_blur = lambda e: validar_campo_data_ao_sair(campo_data_emprestimo)
+    campo_data_devolucao.on_blur = lambda e: validar_campo_data_ao_sair(campo_data_devolucao)
     campo_pesquisa.on_change = lambda e: atualizar_tabela()
-    def salvar(e):
-        if not campo_nome.value.strip():
-    	        erro("Informe o nome")
-    	        campo_nome.error_text = "Obrigatório"
-    	        page.update()
-    	        return
 
-        campo_nome.error_text = None
+    # --- CONTROLE E FLUXO DE EDIÇÃO ---
+    def iniciar_edicao(item_dict):
+        nonlocal id_em_edicao
+        id_em_edicao = item_dict["id"]
         
-        if not campo_livro.value.strip():
-                erro("Informe o nome do livro")
-                campo_livro.error_text = "Obrigatório"
-                page.update()
-                return
-
-        campo_livro.error_text = None
+        campo_nome.value = item_dict["nome"]
+        campo_cpf.value = item_dict["cpf"]
+        campo_livro.value = item_dict["livro"]
+        campo_data_emprestimo.value = item_dict["data_emprestimo"]
+        campo_data_devolucao.value = item_dict["data_devolucao"]
         
-        if not data_valida(campo_data_emprestimo.value):
-            campo_data_emprestimo.error_text = "Data inválida"
-            page.update()
-            return
+        botao_salvar.text = "Atualizar Empréstimo"
+        botao_salvar.icon = ft.Icons.EDIT
+        botao_salvar.bgcolor = ft.Colors.PURPLE
+        botao_salvar.color = ft.Colors.WHITE
+        botao_cancelar.visible = True
+        
+        campo_nome.focus()
+        page.update()
 
-        campo_data_emprestimo.error_text = None
-
-        if not data_valida(campo_data_devolucao.value):
-            campo_data_devolucao.error_text = "Data inválida"
-            page.update()
-            return
-
-        campo_data_devolucao.error_text = None
-
-        adicionar_emprestimo(
-            campo_nome.value,
-            campo_cpf.value,
-            campo_livro.value,
-            campo_data_emprestimo.value,
-            campo_data_devolucao.value
-        )
-
+    def limpar_edicao():
+        nonlocal id_em_edicao
+        id_em_edicao = None
+        
         campo_nome.value = ""
         campo_cpf.value = ""
         campo_livro.value = ""
         campo_data_emprestimo.value = ""
         campo_data_devolucao.value = ""
-
-        page.snack_bar = ft.SnackBar(
-                content=ft.Text("Emprestimo cadastrado!")
-                )
-        page.snack_bar.open = True
+        
+        campo_nome.error_text = None
+        campo_livro.error_text = None
+        campo_data_emprestimo.error_text = None
+        campo_data_devolucao.error_text = None
+        
+        botao_salvar.text = "Salvar"
+        botao_salvar.icon = ft.Icons.SAVE
+        botao_salvar.bgcolor = None
+        botao_salvar.color = None
+        botao_cancelar.visible = False
         page.update()
 
+    # --- MONTAGEM DA TABELA (ESTÁVEL) ---
+    def atualizar_tabela():
+        tabela.rows.clear()
+        pesquisa = campo_pesquisa.value.lower().strip()
+        emprestimos = database.listar_emprestimos()
+
+        for item in emprestimos:
+            # Transforma em dicionário comum do Python de forma explícita
+            item_dados = dict(item)
+
+            if pesquisa and (
+                pesquisa not in item_dados["nome"].lower()
+                and pesquisa not in item_dados["cpf"].lower()
+                and pesquisa not in item_dados["livro"].lower()
+            ):
+                continue
+
+            est_devolvido = bool(item_dados["devolvido"])
+
+            if est_devolvido:
+                status_widget = ft.Text("✅ Devolvido", color="green", weight=ft.FontWeight.BOLD)
+            else:
+                status_widget = ft.Text("📚 Emprestado", color="blue", weight=ft.FontWeight.BOLD)
+
+            id_atual = item_dados["id"]
+
+            tabela.rows.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(item_dados["nome"])),
+                        ft.DataCell(ft.Text(item_dados["cpf"])),
+                        ft.DataCell(ft.Text(item_dados["livro"])),
+                        ft.DataCell(ft.Text(item_dados["data_emprestimo"])),
+                        ft.DataCell(ft.Text(item_dados["data_devolucao"])),
+                        ft.DataCell(status_widget),
+                        ft.DataCell(
+                            ft.Row(
+                                controls=[
+                                    ft.IconButton(
+                                        ft.Icons.EDIT, 
+                                        tooltip="Editar", 
+                                        icon_color="blue_400", 
+                                        on_click=lambda e, it=item_dados: iniciar_edicao(it)
+                                    ),
+                                    ft.IconButton(
+                                        ft.Icons.CHECK, 
+                                        tooltip="Marcar devolvido", 
+                                        icon_color="green" if not est_devolvido else "grey_400",
+                                        disabled=est_devolvido,
+                                        on_click=lambda e, idx=id_atual: executar_devolucao(idx)
+                                    ),
+                                    ft.IconButton(
+                                        ft.Icons.UNDO, 
+                                        tooltip="Desfazer devolução", 
+                                        icon_color="orange" if est_devolvido else "grey_400",
+                                        disabled=not est_devolvido,
+                                        on_click=lambda e, idx=id_atual: executar_desfazer(idx)
+                                    ),
+                                    ft.IconButton(
+                                        ft.Icons.DELETE, 
+                                        tooltip="Excluir", 
+                                        icon_color="red", 
+                                        on_click=lambda e, idx=id_atual: executar_exclusao(idx)
+                                    ),
+                                ]
+                            )
+                        ),
+                    ]
+                )
+            )
+        page.update()
+
+    # --- SALVAR OU ATUALIZAR ---
+    def salvar(e):
+        if not campo_nome.value.strip():
+            erro("Informe o nome")
+            campo_nome.error_text = "Obrigatório"
+            page.update()
+            return
+        campo_nome.error_text = None
+
+        if not campo_livro.value.strip():
+            erro("Informe o nome do livro")
+            campo_livro.error_text = "Obrigatório"
+            page.update()
+            return
+        campo_livro.error_text = None
+
+        validar_campo_data_ao_sair(campo_data_emprestimo)
+        validar_campo_data_ao_sair(campo_data_devolucao)
+
+        if campo_data_emprestimo.error_text or not campo_data_emprestimo.value.strip():
+            if not campo_data_emprestimo.value.strip(): campo_data_emprestimo.error_text = "Obrigatório"
+            erro("Corrija a data de empréstimo antes de salvar.")
+            return
+
+        if campo_data_devolucao.error_text or not campo_data_devolucao.value.strip():
+            if not campo_data_devolucao.value.strip(): campo_data_devolucao.error_text = "Obrigatório"
+            erro("Corrija a data de devolução antes de salvar.")
+            return
+
+        if id_em_edicao is not None:
+            database.atualizar_emprestimo(
+                id_em_edicao, campo_nome.value, campo_cpf.value, campo_livro.value,
+                campo_data_emprestimo.value, campo_data_devolucao.value
+            )
+            sucesso("Empréstimo atualizado com sucesso!")
+        else:
+            database.adicionar_emprestimo(
+                campo_nome.value, campo_cpf.value, campo_livro.value,
+                campo_data_emprestimo.value, campo_data_devolucao.value
+            )
+            sucesso("Empréstimo cadastrado com sucesso!")
+
+        limpar_edicao()
         atualizar_tabela()
 
-    def devolver(id):
-        marcar_devolvido(id)
+    # --- AÇÕES INTERMEDIÁRIAS DO BANCO ---
+    def executar_devolucao(id_emp):
+        database.marcar_devolvido(id_emp)
+        sucesso("Status atualizado para Devolvido!")
         atualizar_tabela()
 
-    def desfazer(id):
-        desfazer_devolucao(id)
+    def executar_desfazer(id_emp):
+        database.desfazer_devolucao(id_emp)
+        sucesso("Status alterado de volta para Emprestado!")
         atualizar_tabela()
 
+    def executar_exclusao(id_emp):
+        database.excluir_emprestimo(id_emp)
+        sucesso("Empréstimo excluído!")
+        if id_em_edicao == id_emp:
+            limpar_edicao()
+        atualizar_tabela()
+
+    # --- LAYOUT PRINCIPAL ---
     formulario = ft.Row(
         controls=[
-            campo_nome,
-            campo_cpf,
-            campo_livro,
-            campo_data_emprestimo,
-            campo_data_devolucao,
-            ft.ElevatedButton(
-                "Salvar",
-                on_click=salvar
-            )
+            campo_nome, campo_cpf, campo_livro,
+            campo_data_emprestimo, campo_data_devolucao,
+            botao_salvar, botao_cancelar
         ],
-        wrap=True
+        wrap=True,
+        vertical_alignment=ft.CrossAxisAlignment.START
     )
 
     page.add(
-    titulo,
-    formulario,
-    campo_pesquisa,
-    ft.Divider(),
-    ft.Row(
-        controls=[tabela],
-        scroll=ft.ScrollMode.AUTO,
-    ),
-)
+        titulo,
+        ft.Card(content=ft.Container(formulario, padding=15)),
+        campo_pesquisa,
+        ft.Divider(),
+        ft.Row(controls=[tabela], scroll=ft.ScrollMode.AUTO),
+    )
 
     atualizar_tabela()
-
 
 ft.run(main)
