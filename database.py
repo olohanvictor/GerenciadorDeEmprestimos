@@ -1,8 +1,11 @@
 import sqlite3
 
 def criar_tabela():
+    #Chamando o Sqlite e inicializando o banco de dados local.
     conn = sqlite3.connect("biblioteca.db")
     cursor = conn.cursor()
+
+    #O SQL a ser execeutado no Sqlite.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS emprestimos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,6 +24,8 @@ def listar_emprestimos():
     conn = sqlite3.connect("biblioteca.db")
     conn.row_factory = sqlite3.Row  # Permite acessar os dados como item["nome"]
     cursor = conn.cursor()
+
+    #Retorne os livros emprestados, primeiro os devolvidos.
     cursor.execute("SELECT * FROM emprestimos ORDER BY devolvido ASC, id DESC")
     resultados = cursor.fetchall()
     conn.close()
@@ -29,6 +34,8 @@ def listar_emprestimos():
 def adicionar_emprestimo(nome, cpf, livro, data_emp, data_dev):
     conn = sqlite3.connect("biblioteca.db")
     cursor = conn.cursor()
+
+    #Adicione no banco de dados o novo emprestimo
     cursor.execute("""
         INSERT INTO emprestimos (nome, cpf, livro, data_emprestimo, data_devolucao, devolvido)
         VALUES (?, ?, ?, ?, ?, 0)
@@ -39,6 +46,8 @@ def adicionar_emprestimo(nome, cpf, livro, data_emp, data_dev):
 def atualizar_emprestimo(id_emprestimo, nome, cpf, livro, data_emp, data_dev):
     conn = sqlite3.connect("biblioteca.db")
     cursor = conn.cursor()
+
+    #Insira os novos valores nos respectivos campos.
     cursor.execute("""
         UPDATE emprestimos 
         SET nome = ?, cpf = ?, livro = ?, data_emprestimo = ?, data_devolucao = ?
@@ -50,6 +59,8 @@ def atualizar_emprestimo(id_emprestimo, nome, cpf, livro, data_emp, data_dev):
 def marcar_devolvido(id_emprestimo):
     conn = sqlite3.connect("biblioteca.db")
     cursor = conn.cursor()
+
+    #Altere o valor referente 'a devolucao para devolvido.
     cursor.execute("UPDATE emprestimos SET devolvido = 1 WHERE id = ?", (id_emprestimo,))
     conn.commit()
     conn.close()
@@ -57,6 +68,8 @@ def marcar_devolvido(id_emprestimo):
 def desfazer_devolucao(id_emprestimo):
     conn = sqlite3.connect("biblioteca.db")
     cursor = conn.cursor()
+
+    #Oposto do acima.
     cursor.execute("UPDATE emprestimos SET devolvido = 0 WHERE id = ?", (id_emprestimo,))
     conn.commit()
     conn.close()
