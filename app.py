@@ -3,6 +3,7 @@ import utils
 import database
 
 def main(page: ft.Page):
+    #Inicializa a tabela
     database.criar_tabela()
 
     page.title = "Biblioteca - Controle de Empréstimos"
@@ -24,7 +25,7 @@ def main(page: ft.Page):
 
     botao_salvar = ft.ElevatedButton("Salvar", on_click=lambda e: salvar(e), icon=ft.Icons.SAVE)
     botao_cancelar = ft.TextButton("Cancelar", on_click=lambda e: limpar_edicao(), visible=False, icon=ft.Icons.CANCEL)
-
+    
     tabela = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("Nome")),
@@ -197,7 +198,7 @@ def main(page: ft.Page):
 
     # --- SALVAR OU ATUALIZAR ---
     def salvar(e):
-        if not campo_nome.value.strip():
+        if not campo_nome.value.strip(): #Se o valor for nulo, erro.
             erro("Informe o nome")
             campo_nome.error_text = "Obrigatório"
             page.update()
